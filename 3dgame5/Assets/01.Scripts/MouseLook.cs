@@ -1,10 +1,8 @@
-using _01.Scripts.Player;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 public class MouseLook : MonoBehaviour
 {
-    [SerializeField] private PlayerInputSo input;
     [SerializeField] private Transform playerBody;
     [SerializeField] private float sensitivity = 0.12f;
     [SerializeField] private Vector3 eyeOffset = new Vector3(0f, 1.6f, 0f);
@@ -12,37 +10,45 @@ public class MouseLook : MonoBehaviour
     [SerializeField] private Key unlockKey = Key.Escape;
 
     private float _pitch;
+    private bool _cursorUnlocked;
 
-    private void OnEnable()
+    private void Start()
     {
         ApplyCursorLock();
+        Application.targetFrameRate = 60;
     }
 
     private void OnApplicationFocus(bool hasFocus)
     {
-        if (hasFocus)
-        {
+        if (hasFocus && !_cursorUnlocked)
             ApplyCursorLock();
-        }
     }
 
     private void Update()
     {
         UpdateCursorLock();
 
-        if (input == null || playerBody == null)
-        {
+        if (playerBody == null)
             return;
-        }
 
-        transform.position = playerBody.position + eyeOffset;
-        Vector2 look = input.LookDelta * sensitivity;
+        if (Cursor.lockState != CursorLockMode.Locked)
+            return;
+
+        Vector2 look = Mouse.current.delta.ReadValue() * sensitivity;
 
         _pitch -= look.y;
         _pitch = Mathf.Clamp(_pitch, -85f, 85f);
 
-        transform.localRotation = Quaternion.Euler(_pitch, 0f, 0f);
         playerBody.Rotate(Vector3.up * look.x);
+    }
+
+    private void LateUpdate()
+    {
+        if (playerBody == null)
+            return;
+
+        transform.position = playerBody.position + eyeOffset;
+        transform.localRotation = Quaternion.Euler(_pitch, 0f, 0f);
     }
 
     private void UpdateCursorLock()
@@ -56,18 +62,15 @@ public class MouseLook : MonoBehaviour
 
         if (Keyboard.current != null && Keyboard.current[unlockKey].wasPressedThisFrame)
         {
+            _cursorUnlocked = true;
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
             return;
         }
 
-        if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+        if (_cursorUnlocked && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
         {
-            ApplyCursorLock();
-        }
-
-        if (Cursor.lockState != CursorLockMode.Locked)
-        {
+            _cursorUnlocked = false;
             ApplyCursorLock();
         }
     }
@@ -75,9 +78,7 @@ public class MouseLook : MonoBehaviour
     private void ApplyCursorLock()
     {
         if (!lockCursor)
-        {
             return;
-        }
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
