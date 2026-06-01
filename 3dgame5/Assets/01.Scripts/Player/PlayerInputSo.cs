@@ -71,5 +71,6 @@ namespace _01.Scripts.Player
         {
             JumpPressed = false;
         }
+        
     }
 }

@@ -1,60 +1,111 @@
-using _01.Scripts.Player;
 using UnityEngine;
 
-[RequireComponent(typeof(CharacterController))]
-public class PlayerMovement : MonoBehaviour
+namespace _01.Scripts.Player
 {
-    [SerializeField] private PlayerInputSo input;
-    [SerializeField] private float moveSpeed = 5f;
-    [SerializeField] private float jumpHeight = 1.2f;
-    [SerializeField] private float gravity = -20f;
-
-    private CharacterController _controller;
-    private Vector3 _velocity;
-
-    private void Awake()
+    [RequireComponent(typeof(CharacterController))]
+    public class PlayerMovement : MonoBehaviour
     {
-        _controller = GetComponent<CharacterController>();
-    }
+        [SerializeField] private PlayerInputSo input;
+        [SerializeField] private float moveSpeed = 5f;
+        [SerializeField] private float jumpHeight = 1.2f;
+        [SerializeField] private float gravity = -20f;
+        [SerializeField] private float groundedStickForce = -2f;
+        [SerializeField] private float coyoteTime = 0.12f;
+        [SerializeField] private float jumpBufferTime = 0.12f;
+        [SerializeField] private LayerMask groundLayers;
+        [SerializeField] private float groundCheckRadius = 0.3f;
+        [SerializeField] private float groundCheckOffset = 0.08f;
 
-    private void Update()
-    {
-        if (input == null)
+        private CharacterController _controller;
+        private Vector3 _velocity;
+        private float _lastGroundedTime;
+        private float _lastJumpPressedTime;
+
+        private void Awake()
         {
-            return;
+            _controller = GetComponent<CharacterController>();
         }
 
-        Move();
-        ApplyGravityAndJump();
-    }
-
-    private void Move()
-    {
-        Vector2 moveInput = input.MovementKey;
-        Vector3 moveDirection = transform.right * moveInput.x + transform.forward * moveInput.y;
-
-        if (moveDirection.sqrMagnitude > 1f)
+        private void Update()
         {
-            moveDirection.Normalize();
+            if (input == null)
+            {
+                return;
+            }
+
+            Vector2 moveInput = input.MovementKey;
+            Vector3 moveDirection = transform.right * moveInput.x + transform.forward * moveInput.y;
+
+            if (moveDirection.sqrMagnitude > 1f)
+            {
+                moveDirection.Normalize();
+            }
+
+            bool isGrounded = CheckGrounded();
+
+            if (isGrounded)
+            {
+                _lastGroundedTime = Time.time;
+
+                if (_velocity.y < 0f)
+                {
+                    _velocity.y = groundedStickForce;
+                }
+            }
+
+            if (input.JumpPressed)
+            {
+                _lastJumpPressedTime = Time.time;
+                input.ConsumeJump();
+            }
+
+            bool canUseCoyoteTime = Time.time - _lastGroundedTime <= coyoteTime;
+            bool hasBufferedJump = Time.time - _lastJumpPressedTime <= jumpBufferTime;
+
+            if (canUseCoyoteTime && hasBufferedJump)
+            {
+                _lastGroundedTime = -999f;
+                _lastJumpPressedTime = -999f;
+                _velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+            }
+
+            _velocity.y += gravity * Time.deltaTime;
+
+            Vector3 horizontalVelocity = moveDirection * moveSpeed;
+            Vector3 frameVelocity = horizontalVelocity + Vector3.up * _velocity.y;
+
+            CollisionFlags flags = _controller.Move(frameVelocity * Time.deltaTime);
+
+            if ((flags & CollisionFlags.Above) != 0 && _velocity.y > 0f)
+            {
+                _velocity.y = 0f;
+            }
         }
 
-        _controller.Move(moveDirection * moveSpeed * Time.deltaTime);
-    }
-
-    private void ApplyGravityAndJump()
-    {
-        if (_controller.isGrounded && _velocity.y < 0f)
+        private bool CheckGrounded()
         {
-            _velocity.y = -2f;
+            Vector3 spherePosition = transform.position + Vector3.up * groundCheckOffset;
+
+            return Physics.CheckSphere(
+                spherePosition,
+                groundCheckRadius,
+                groundLayers,
+                QueryTriggerInteraction.Ignore);
         }
 
-        if (_controller.isGrounded && input.JumpPressed)
+        private void OnDrawGizmosSelected()
         {
-            _velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
-        }
+            CharacterController controller = _controller != null ? _controller : GetComponent<CharacterController>();
 
-        input.ConsumeJump();
-        _velocity.y += gravity * Time.deltaTime;
-        _controller.Move(_velocity * Time.deltaTime);
+            if (controller == null)
+            {
+                return;
+            }
+
+            Vector3 spherePosition = transform.position + Vector3.up * groundCheckOffset;
+
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireSphere(spherePosition, groundCheckRadius);
+        }
     }
 }
